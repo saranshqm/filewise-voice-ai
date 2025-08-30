@@ -6,11 +6,17 @@ import pathlib
 import sys
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import json
 
+API_KEY = ''
+with open('../../GPT_SECRET_KEY.json', 'r') as file_to_read:
+    json_data = json.load(file_to_read)
+    API_KEY = json_data["API_KEY"]
+os.environ["API_KEY"] = API_KEY
 # uvicorn main:app --reload
 
-f = open("../../secret_key.txt")
-API_KEY = f.read()
+# f = open("../../secret_key.txt")
+# API_KEY = f.read()
 
 # API_KEY = ""
 
@@ -29,7 +35,7 @@ model_name = 'gemini-2.5-flash-lite' #gemini-2.5-pro
 # IMPORTANT: Set your Gemini API key here
 # Recommended: set as environment variable instead of hardcoding.
 try:
-    genai.configure(api_key=API_KEY)
+    genai.configure(api_key=str(os.environ["API_KEY"]))
 except AttributeError:
     print("Error: Please set your 'GEMINI_API_KEY' as an environment variable.")
     sys.exit(1)
