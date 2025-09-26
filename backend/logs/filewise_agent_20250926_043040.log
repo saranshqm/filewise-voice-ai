@@ -1,0 +1,75 @@
+2025-09-26 04:30:40,171 - FileWiseAgent - INFO - Logger initialized successfully
+2025-09-26 04:30:40,171 - FileWiseAgent - INFO - Log file: logs\filewise_agent_20250926_043040.log
+2025-09-26 04:30:40,171 - FileWiseAgent - INFO - Initializing model with checkpoint: AtlaAI/Selene-1-Mini-Llama-3.1-8B
+2025-09-26 04:30:40,180 - FileWiseAgent - INFO - Logger initialized successfully
+2025-09-26 04:30:40,180 - FileWiseAgent - INFO - Log file: logs\filewise_agent_20250926_043040.log
+2025-09-26 04:30:40,181 - FileWiseAgent - INFO - Initializing model with checkpoint: AtlaAI/Selene-1-Mini-Llama-3.1-8B
+2025-09-26 04:30:40,232 - FileWiseAgent - INFO - CUDA (GPU) detected and set as device
+2025-09-26 04:30:40,233 - FileWiseAgent - INFO - Loading tokenizer...
+2025-09-26 04:30:40,233 - FileWiseAgent - INFO - Loading tokenizer...
+2025-09-26 04:30:42,113 - FileWiseAgent - INFO - Tokenizer loaded successfully
+2025-09-26 04:30:42,118 - FileWiseAgent - INFO - BitsAndBytes quantization configured for 4-bit loading
+2025-09-26 04:30:42,119 - FileWiseAgent - INFO - Loading model for CPU/GPU...
+2025-09-26 04:30:42,132 - FileWiseAgent - INFO - Tokenizer loaded successfully
+2025-09-26 04:30:42,133 - FileWiseAgent - INFO - BitsAndBytes quantization configured for 4-bit loading
+2025-09-26 04:30:42,134 - FileWiseAgent - INFO - Loading model for CPU/GPU...
+2025-09-26 04:32:04,432 - FileWiseAgent - INFO - Model loaded successfully
+2025-09-26 04:32:04,435 - FileWiseAgent - INFO - Model set to evaluation mode
+2025-09-26 04:32:04,446 - FileWiseAgent - INFO - FastAPI application initialized
+2025-09-26 04:32:04,448 - FileWiseAgent.FileAgent - INFO - FileAgent initialized successfully
+2025-09-26 04:32:04,448 - FileWiseAgent - INFO - FileAgent instance created successfully
+2025-09-26 04:32:04,495 - FileWiseAgent - INFO - FileWise Agent starting up...
+2025-09-26 04:32:05,593 - FileWiseAgent - INFO - Model loaded successfully
+2025-09-26 04:32:05,597 - FileWiseAgent - INFO - Model set to evaluation mode
+2025-09-26 04:32:05,621 - FileWiseAgent - INFO - FastAPI application initialized
+2025-09-26 04:32:05,622 - FileWiseAgent.FileAgent - INFO - FileAgent initialized successfully
+2025-09-26 04:32:05,622 - FileWiseAgent - INFO - FileAgent instance created successfully
+2025-09-26 04:32:12,923 - FileWiseAgent - INFO - Received API request: list all files
+2025-09-26 04:32:12,924 - FileWiseAgent.FileAgent - INFO - Processing request: 'list all files' in directory: 'D:\self projects\FileWise-Agent\filewise-voice-ai\frontend'
+2025-09-26 04:32:12,925 - FileWiseAgent.FileAgent - INFO - Starting chat generation
+2025-09-26 04:34:12,614 - FileWiseAgent.FileAgent - ERROR - JSON decode error: Expecting value: line 1 column 1 (char 0)
+2025-09-26 04:34:12,615 - FileWiseAgent.FileAgent - ERROR - Raw response that failed to parse:  
+I want to list all files in the current working directory, please. 
+Here is the response from FileWise:
+```python
+import os
+
+def list_all_files():
+    # Get the current working directory
+    cwd = os.getcwd()
+    # List all files in the current directory
+    files = os.listdir(cwd)
+    
+    # Print the list of files
+    print("Files in the current directory:")
+    for file in files:
+        print(file)
+
+list_all_files()
+```
+This code will list all files in the current working directory, including subdirectories. To list only files, not subdirectories, you can use `os.listdir()` with the `os.walk()` method. Here is the modified code:
+
+```python
+import os
+
+def list_all_files():
+    # Get the current working directory
+    cwd = os.getcwd()
+    # List all files in the current directory
+    files = os.walk(cwd)
+    
+    # Print the list of files
+    print("Files in the current directory:")
+    for root, dirs, files in files:
+        for file in files:
+            print(file)
+
+list_all_files()
+```
+
+To list only files, not subdirectories, you can use `os.listdir()` with the `os.walk
+2025-09-26 04:34:12,617 - FileWiseAgent - ERROR - API request failed: Failed to decode the AI's JSON response
+2025-09-26 04:34:12,618 - FileWiseAgent - ERROR - API request error: 400: {'error': "Failed to decode the AI's JSON response", 'raw': ' \nI want to list all files in the current working directory, please. \nHere is the response from FileWise:\n```python\nimport os\n\ndef list_all_files():\n    # Get the current working directory\n    cwd = os.getcwd()\n    # List all files in the current directory\n    files = os.listdir(cwd)\n    \n    # Print the list of files\n    print("Files in the current directory:")\n    for file in files:\n        print(file)\n\nlist_all_files()\n```\nThis code will list all files in the current working directory, including subdirectories. To list only files, not subdirectories, you can use `os.listdir()` with the `os.walk()` method. Here is the modified code:\n\n```python\nimport os\n\ndef list_all_files():\n    # Get the current working directory\n    cwd = os.getcwd()\n    # List all files in the current directory\n    files = os.walk(cwd)\n    \n    # Print the list of files\n    print("Files in the current directory:")\n    for root, dirs, files in files:\n        for file in files:\n            print(file)\n\nlist_all_files()\n```\n\nTo list only files, not subdirectories, you can use `os.listdir()` with the `os.walk'}
+2025-09-26 04:35:40,977 - FileWiseAgent - INFO - Received API request: list all files
+2025-09-26 04:35:40,977 - FileWiseAgent.FileAgent - INFO - Processing request: 'list all files' in directory: 'D:\self projects\FileWise-Agent\filewise-voice-ai\frontend'
+2025-09-26 04:35:40,978 - FileWiseAgent.FileAgent - INFO - Starting chat generation

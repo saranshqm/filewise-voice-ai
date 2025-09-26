@@ -6,7 +6,7 @@ import pyttsx3
 
 
 # --- Backend API URL ---
-API_URL = "http://127.0.0.1:8000/file-agent"  # Update if backend runs elsewhere
+API_URL = "http://127.0.0.1:8001/file-agent"  # Update if backend runs elsewhere
 
 st.set_page_config(page_title="FileWise Chat", page_icon="📂", layout="wide")
 
@@ -36,7 +36,7 @@ def send_to_agent(user_input):
         response = requests.post(
             API_URL,
             json={"prompt": user_input, "current_dir": st.session_state.cwd},
-            timeout=60,
+            timeout=6000,
         )
 
         if response.status_code == 200:
@@ -116,7 +116,7 @@ if st.button("Start Recording"):
         with sr.Microphone() as source:
             st.write("🎙️ Listening... Speak now.")
             r.adjust_for_ambient_noise(source, duration=1)
-            audio = r.listen(source, timeout=5, phrase_time_limit=8)
+            audio = r.listen(source, timeout=15, phrase_time_limit=20)
             st.write("⏳ Recognizing...")
             text = r.recognize_google(audio)
             st.success(f"✅ You said: {text}")

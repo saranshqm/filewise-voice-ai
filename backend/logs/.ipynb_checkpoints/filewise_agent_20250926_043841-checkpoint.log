@@ -1,0 +1,8 @@
+2025-09-26 04:38:41,568 - FileWiseAgent - INFO - Logger initialized successfully
+2025-09-26 04:38:41,569 - FileWiseAgent - INFO - Log file: logs\filewise_agent_20250926_043841.log
+2025-09-26 04:38:41,569 - FileWiseAgent - INFO - Initializing model with checkpoint: AtlaAI/Selene-1-Mini-Llama-3.1-8B
+2025-09-26 04:38:41,630 - FileWiseAgent - INFO - CUDA (GPU) detected and set as device
+2025-09-26 04:38:41,630 - FileWiseAgent - INFO - Loading tokenizer...
+2025-09-26 04:38:43,191 - FileWiseAgent - INFO - Tokenizer loaded successfully
+2025-09-26 04:38:43,194 - FileWiseAgent - INFO - BitsAndBytes quantization configured for 4-bit loading
+2025-09-26 04:38:43,194 - FileWiseAgent - INFO - Loading model for CPU/GPU...

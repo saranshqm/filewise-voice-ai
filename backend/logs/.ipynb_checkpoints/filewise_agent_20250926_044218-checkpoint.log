@@ -1,0 +1,17 @@
+2025-09-26 04:42:18,718 - FileWiseAgent - INFO - Logger initialized successfully
+2025-09-26 04:42:18,718 - FileWiseAgent - INFO - Log file: logs\filewise_agent_20250926_044218.log
+2025-09-26 04:42:18,718 - FileWiseAgent - INFO - Initializing model with checkpoint: AtlaAI/Selene-1-Mini-Llama-3.1-8B
+2025-09-26 04:42:18,796 - FileWiseAgent - INFO - CUDA (GPU) detected and set as device
+2025-09-26 04:42:18,796 - FileWiseAgent - INFO - Loading tokenizer...
+2025-09-26 04:42:20,530 - FileWiseAgent - INFO - Tokenizer loaded successfully
+2025-09-26 04:42:20,532 - FileWiseAgent - INFO - BitsAndBytes quantization configured for 4-bit loading
+2025-09-26 04:42:20,533 - FileWiseAgent - INFO - Loading model for CPU/GPU...
+2025-09-26 04:43:00,787 - FileWiseAgent - INFO - Model loaded successfully
+2025-09-26 04:43:00,789 - FileWiseAgent - INFO - Model set to evaluation mode
+2025-09-26 04:43:00,790 - FileWiseAgent - INFO - FastAPI application initialized
+2025-09-26 04:43:00,790 - FileWiseAgent.FileAgent - INFO - FileAgent initialized successfully
+2025-09-26 04:43:00,790 - FileWiseAgent - INFO - FileAgent instance created successfully
+2025-09-26 04:43:00,792 - FileWiseAgent - INFO - FileWise Agent starting up...
+2025-09-26 04:43:53,785 - FileWiseAgent - INFO - Received API request: list all files
+2025-09-26 04:43:53,786 - FileWiseAgent.FileAgent - INFO - Processing request: 'list all files' in directory: 'D:\self projects\FileWise-Agent\filewise-voice-ai\frontend'
+2025-09-26 04:43:53,786 - FileWiseAgent.FileAgent - INFO - Starting chat generation
