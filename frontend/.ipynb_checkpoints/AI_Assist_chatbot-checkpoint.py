@@ -5,7 +5,7 @@ import speech_recognition as sr
 import pyttsx3
 
 # --- Backend API URL ---
-API_URL = "http://127.0.0.1:8001/file-agent"
+API_URL = "http://127.0.0.1:8002/file-agent"
 
 # --- Page Configuration with Nebula Theme ---
 st.set_page_config(
