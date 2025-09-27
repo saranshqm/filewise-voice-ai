@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, messagebox
 import requests
 import threading
 import json
@@ -7,6 +7,7 @@ from datetime import datetime
 import speech_recognition as sr
 import pyaudio
 import time
+import pyttsx3  # Added for text-to-speech
 
 class VoiceAssistantUI:
     def __init__(self, root):
@@ -22,9 +23,21 @@ class VoiceAssistantUI:
         self.wake_words = ["jarvis", "javis", "jar"]
         self.voice_thread = None
         
+        # Initialize text-to-speech engine
+        self.tts_engine = pyttsx3.init()
+        self.tts_engine.setProperty('rate', 150)  # Speech rate
+        self.tts_engine.setProperty('volume', 0.8)  # Volume level
+        
         self.setup_ui()
         self.setup_microphone()
         self.test_connection()
+
+    def clear_logs(self):
+        """Clear the voice activity logs"""
+        self.log_text.config(state='normal')
+        self.log_text.delete(1.0, tk.END)
+        self.log_text.config(state='disabled')
+        self.log_message("📋 Logs cleared")
         
     def setup_ui(self):
         # Title
@@ -36,6 +49,44 @@ class VoiceAssistantUI:
             bg='#2c3e50'
         )
         title_label.pack(pady=10)
+        
+        # TTS Control Frame
+        tts_frame = tk.Frame(self.root, bg='#34495e')
+        tts_frame.pack(pady=5, fill='x', padx=20)
+        
+        tk.Label(
+            tts_frame,
+            text="Speech Response:",
+            font=('Arial', 10, 'bold'),
+            fg='#f39c12',
+            bg='#34495e'
+        ).pack(anchor='w')
+        
+        tts_control_frame = tk.Frame(tts_frame, bg='#34495e')
+        tts_control_frame.pack(fill='x', pady=5)
+        
+        self.tts_enabled = tk.BooleanVar(value=True)
+        tts_toggle = tk.Checkbutton(
+            tts_control_frame,
+            text="Enable Voice Responses",
+            variable=self.tts_enabled,
+            font=('Arial', 9),
+            fg='#ecf0f1',
+            bg='#34495e',
+            selectcolor='#2c3e50'
+        )
+        tts_toggle.pack(side='left', padx=5)
+        
+        test_tts_btn = tk.Button(
+            tts_control_frame,
+            text="Test Speech",
+            command=self.test_tts,
+            bg='#16a085',
+            fg='white',
+            font=('Arial', 9),
+            width=12
+        )
+        test_tts_btn.pack(side='left', padx=5)
         
         # Debug Info Frame
         debug_frame = tk.Frame(self.root, bg='#34495e')
@@ -177,17 +228,53 @@ class VoiceAssistantUI:
         )
         wake_words_text.pack(anchor='w', pady=2)
         
+        # Clarification Frame
+        # clarification_frame = tk.Frame(self.root, bg='#2c3e50')
+        # clarification_frame.pack(pady=5, fill='x', padx=20)
+        
+        # tk.Label(
+        #     clarification_frame,
+        #     text="Clarification Mode:",
+        #     font=('Arial', 10, 'bold'),
+        #     fg='#f39c12',
+        #     bg='#2c3e50'
+        # ).pack(anchor='w')
+        
+        # clarification_text = tk.Label(
+        #     clarification_frame,
+        #     text="🔍 If command is unclear, I will ask for clarification",
+        #     font=('Arial', 9),
+        #     fg='#ecf0f1',
+        #     bg='#2c3e50'
+        # )
+        # clarification_text.pack(anchor='w', pady=2)
+        
         # Log Frame
         log_frame = tk.Frame(self.root, bg='#2c3e50')
         log_frame.pack(pady=10, fill='both', expand=True, padx=20)
         
+        log_header_frame = tk.Frame(log_frame, bg='#2c3e50')
+        log_header_frame.pack(fill='x')
+        
         tk.Label(
-            log_frame,
+            log_header_frame,
             text="Voice Activity Log:",
             font=('Arial', 12, 'bold'),
             fg='#bdc3c7',
             bg='#2c3e50'
-        ).pack(anchor='w')
+        ).pack(side='left', anchor='w')
+        
+        # ADDED: Clear Logs button
+        clear_logs_btn = tk.Button(
+            log_header_frame,
+            text="Clear Logs",
+            command=self.clear_logs,
+            bg='#e67e22',
+            fg='white',
+            font=('Arial', 9),
+            width=10
+        )
+        clear_logs_btn.pack(side='right', padx=5)
         
         self.log_text = scrolledtext.ScrolledText(
             log_frame,
@@ -199,7 +286,112 @@ class VoiceAssistantUI:
         )
         self.log_text.pack(fill='both', expand=True)
         self.log_text.config(state='disabled')
+    
+    def speak_response(self, text):
+        """Speak the response using text-to-speech"""
+        if self.tts_enabled.get():
+            def speak_thread():
+                try:
+                    self.tts_engine.say(text)
+                    self.tts_engine.runAndWait()
+                except Exception as e:
+                    self.log_message(f"❌ TTS Error: {e}")
+            
+            threading.Thread(target=speak_thread, daemon=True).start()
+    
+    def test_tts(self):
+        """Test the text-to-speech functionality"""
+        test_text = "Hello, I am JARVIS. Voice responses are working correctly."
+        self.speak_response(test_text)
+        self.log_message("🔊 Testing text-to-speech: 'Hello, I am JARVIS'")
+    
+    def ask_clarification(self, command):
+        """Ask for clarification when command is unclear"""
+        clarification_text = f"I'm not sure about your command: '{command}'. Could you please clarify what you want me to do?"
         
+        # Speak the clarification
+        self.speak_response(clarification_text)
+        
+        # Show in UI
+        self.log_message(f"❓ Clarification requested: {command}")
+        self.status_text.config(text="❓ Please clarify your command")
+        
+        # Optionally show a dialog box for manual clarification
+        self.root.after(0, lambda: self.show_clarification_dialog(command))
+    
+    def show_clarification_dialog(self, original_command):
+        """Show a dialog box for manual clarification"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Clarification Needed")
+        dialog.geometry("400x200")
+        dialog.configure(bg='#2c3e50')
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(
+            dialog,
+            text="Clarification Needed",
+            font=('Arial', 12, 'bold'),
+            fg='#f39c12',
+            bg='#2c3e50'
+        ).pack(pady=10)
+        
+        tk.Label(
+            dialog,
+            text=f"Original command: '{original_command}'",
+            font=('Arial', 9),
+            fg='#ecf0f1',
+            bg='#2c3e50',
+            wraplength=380
+        ).pack(pady=5)
+        
+        tk.Label(
+            dialog,
+            text="Please clarify your command:",
+            font=('Arial', 10),
+            fg='#ecf0f1',
+            bg='#2c3e50'
+        ).pack(pady=5)
+        
+        clarification_entry = tk.Entry(dialog, width=40, font=('Arial', 10))
+        clarification_entry.pack(pady=10)
+        clarification_entry.focus()
+        
+        def submit_clarification():
+            clarified_command = clarification_entry.get().strip()
+            if clarified_command:
+                dialog.destroy()
+                self.send_command_to_backend(clarified_command)
+                self.speak_response("Thank you for the clarification. Processing your command now.")
+        
+        def cancel_clarification():
+            dialog.destroy()
+            self.speak_response("Clarification cancelled. Please try your command again.")
+        
+        button_frame = tk.Frame(dialog, bg='#2c3e50')
+        button_frame.pack(pady=10)
+        
+        tk.Button(
+            button_frame,
+            text="Submit",
+            command=submit_clarification,
+            bg='#27ae60',
+            fg='white',
+            width=10
+        ).pack(side='left', padx=5)
+        
+        tk.Button(
+            button_frame,
+            text="Cancel",
+            command=cancel_clarification,
+            bg='#e74c3c',
+            fg='white',
+            width=10
+        ).pack(side='left', padx=5)
+        
+        # Bind Enter key to submit
+        dialog.bind('<Return>', lambda e: submit_clarification())
+    
     def setup_microphone(self):
         """Initialize microphone"""
         try:
@@ -357,7 +549,8 @@ class VoiceAssistantUI:
             self.update_debug_info(f"✅ Command: '{command}'")
             self.status_text.config(text=f"📡 Sending command to backend: {command}")
             
-            # Send command to backend
+            # REMOVED: Clarification check
+            # Send command directly to backend
             self.send_command_to_backend(command)
             
         except sr.WaitTimeoutError:
@@ -373,8 +566,95 @@ class VoiceAssistantUI:
             self.update_debug_info(f"❌ Command error: {e}")
             self.status_text.config(text="❌ Error listening for command")
     
+    def needs_clarification(self, command):
+        """Determine if a command needs clarification"""
+        command_lower = command.lower()
+        
+        # Commands that are likely unclear
+        unclear_indicators = [
+            "this", "that", "it", "something", "thing",
+            "do something", "help me", "what", "how"
+        ]
+        
+        # Very short commands might need clarification
+        if len(command.split()) <= 2:
+            return True
+            
+        # Check for unclear indicators
+        for indicator in unclear_indicators:
+            if indicator in command_lower:
+                return True
+                
+        return False
+    
+    def format_response_for_speech(self, result):
+        """Format the backend response for clear speech - FIXED VERSION"""
+        try:
+            # First, try to extract the main content from the response
+            speech_text = ""
+            
+            # Check if there's a direct message or result
+            if "result" in result:
+                response_data = result["result"]
+            elif "response" in result:
+                response_data = result["response"]
+            elif "message" in result:
+                response_data = result["message"]
+            else:
+                response_data = result
+            
+            # Handle different response formats
+            if isinstance(response_data, str):
+                # If it's a string, use it directly
+                speech_text = response_data
+            elif isinstance(response_data, dict):
+                # Extract meaningful content from dictionary
+                if "content" in response_data:
+                    speech_text = response_data["content"]
+                elif "output" in response_data:
+                    speech_text = response_data["output"]
+                elif "text" in response_data:
+                    speech_text = response_data["text"]
+                elif "message" in response_data:
+                    speech_text = response_data["message"]
+                elif "status" in response_data:
+                    speech_text = f"Command completed with status: {response_data['status']}"
+                else:
+                    # Try to find any string value in the dict
+                    for key, value in response_data.items():
+                        if isinstance(value, str) and len(value) > 0:
+                            speech_text = value
+                            break
+                    if not speech_text:
+                        speech_text = "Command executed successfully."
+            elif isinstance(response_data, list):
+                # If it's a list, try to extract meaningful content
+                if len(response_data) > 0:
+                    first_item = response_data[0]
+                    if isinstance(first_item, str):
+                        speech_text = f"Found {len(response_data)} items. {first_item}"
+                    elif isinstance(first_item, dict):
+                        speech_text = f"Operation completed with {len(response_data)} results."
+                else:
+                    speech_text = "Operation completed successfully."
+            else:
+                speech_text = "Command executed successfully."
+            
+            # Clean up the speech text
+            if speech_text:
+                # Remove excessive whitespace and limit length for speech
+                speech_text = ' '.join(str(speech_text).split())
+                if len(speech_text) > 300:
+                    speech_text = speech_text[:300] + "... Check the log for full details."
+            
+            return speech_text if speech_text else "Command completed successfully."
+            
+        except Exception as e:
+            self.log_message(f"❌ Error formatting speech response: {e}")
+            return "Command executed. Check the log for details."
+    
     def send_command_to_backend(self, command):
-        """Send command to backend /file-agent endpoint"""
+        """Send command to backend /file-agent endpoint - IMPROVED VERSION"""
         def send_thread():
             try:
                 self.log_message(f"📤 Sending to backend: '{command}'")
@@ -397,21 +677,27 @@ class VoiceAssistantUI:
                     self.update_debug_info("✅ Command executed successfully")
                     self.status_text.config(text="✅ Command executed successfully")
                     
-                    # Log the result in a readable format
-                    if "result" in result:
-                        self.log_message(f"   Result: {json.dumps(result['result'], indent=2)}")
-                    else:
-                        self.log_message(f"   Response: {json.dumps(result, indent=2)}")
+                    # Log the full result for debugging
+                    self.log_message(f"   Full response: {json.dumps(result, indent=2)}")
+                    
+                    # Speak the response - with better extraction
+                    response_text = self.format_response_for_speech(result)
+                    self.log_message(f"🔊 Speech content: {response_text}")
+                    self.speak_response(response_text)
                         
                 else:
-                    self.log_message(f"❌ Backend error: HTTP {response.status_code}")
-                    self.update_debug_info(f"❌ Backend error: {response.status_code}")
+                    error_msg = f"Backend error: HTTP {response.status_code}"
+                    self.log_message(f"❌ {error_msg}")
+                    self.update_debug_info(f"❌ {error_msg}")
                     self.status_text.config(text="❌ Backend error")
+                    self.speak_response(f"Error processing command. Status code {response.status_code}")
                     
             except Exception as e:
-                self.log_message(f"❌ Error sending command: {e}")
+                error_msg = f"Error sending command: {e}"
+                self.log_message(f"❌ {error_msg}")
                 self.update_debug_info(f"❌ Send error: {e}")
                 self.status_text.config(text="❌ Error sending command")
+                self.speak_response(f"Error sending command to backend. Please check the connection.")
         
         threading.Thread(target=send_thread, daemon=True).start()
 
