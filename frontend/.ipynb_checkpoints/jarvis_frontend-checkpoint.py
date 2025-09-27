@@ -7,13 +7,252 @@ from datetime import datetime
 import speech_recognition as sr
 import pyaudio
 import time
-import pyttsx3  # Added for text-to-speech
+import pyttsx3
+import webbrowser
+import os
+import platform
+import psutil
+import socket
+import geocoder
+from PIL import Image, ImageTk
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+class ResultWindow:
+    def __init__(self, parent, title, data, data_type="json"):
+        self.window = tk.Toplevel(parent)
+        self.window.title(title)
+        self.window.geometry("600x400")
+        self.window.configure(bg='#2c3e50')
+        self.window.transient(parent)
+        self.window.grab_set()
+        
+        # Title
+        title_label = tk.Label(
+            self.window,
+            text=title,
+            font=('Arial', 14, 'bold'),
+            fg='#ecf0f1',
+            bg='#2c3e50'
+        )
+        title_label.pack(pady=10)
+        
+        if data_type == "json":
+            self.show_json_data(data)
+        elif data_type == "stats":
+            self.show_device_stats(data)
+        elif data_type == "location":
+            self.show_location_data(data)
+        elif data_type == "text":
+            self.show_text_data(data)
+        
+    def show_json_data(self, data):
+        """Display JSON data in a readable format"""
+        text_widget = scrolledtext.ScrolledText(
+            self.window,
+            bg='#1a252f',
+            fg='#ecf0f1',
+            font=('Consolas', 10),
+            wrap=tk.WORD
+        )
+        text_widget.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        try:
+            formatted_json = json.dumps(data, indent=2, ensure_ascii=False)
+            text_widget.insert(tk.END, formatted_json)
+        except:
+            text_widget.insert(tk.END, str(data))
+        
+        text_widget.config(state='disabled')
+        
+        # Add copy button
+        copy_btn = tk.Button(
+            self.window,
+            text="Copy to Clipboard",
+            command=lambda: self.copy_to_clipboard(str(data)),
+            bg='#3498db',
+            fg='white'
+        )
+        copy_btn.pack(pady=5)
+    
+    def show_device_stats(self, data):
+        """Display device statistics in a user-friendly way"""
+        main_frame = tk.Frame(self.window, bg='#2c3e50')
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Create notebook for different stat categories
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill='both', expand=True)
+        
+        # System Info Tab
+        system_frame = ttk.Frame(notebook)
+        notebook.add(system_frame, text="System")
+        
+        system_text = scrolledtext.ScrolledText(
+            system_frame,
+            bg='#1a252f',
+            fg='#ecf0f1',
+            font=('Consolas', 9)
+        )
+        system_text.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        system_info = f"""
+System Information:
+-------------------
+OS: {platform.system()} {platform.release()}
+Version: {platform.version()}
+Architecture: {platform.architecture()[0]}
+Processor: {platform.processor()}
+Hostname: {socket.gethostname()}
+        """
+        system_text.insert(tk.END, system_info)
+        system_text.config(state='disabled')
+        
+        # Memory Tab
+        memory_frame = ttk.Frame(notebook)
+        notebook.add(memory_frame, text="Memory")
+        
+        memory_text = scrolledtext.ScrolledText(
+            memory_frame,
+            bg='#1a252f',
+            fg='#ecf0f1',
+            font=('Consolas', 9)
+        )
+        memory_text.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        memory = psutil.virtual_memory()
+        swap = psutil.swap_memory()
+        memory_info = f"""
+Memory Usage:
+-------------
+Total: {memory.total // (1024**3)} GB
+Available: {memory.available // (1024**3)} GB
+Used: {memory.used // (1024**3)} GB ({memory.percent}%)
+Swap: {swap.used // (1024**3)} GB / {swap.total // (1024**3)} GB ({swap.percent}%)
+        """
+        memory_text.insert(tk.END, memory_info)
+        memory_text.config(state='disabled')
+        
+        # CPU Tab
+        cpu_frame = ttk.Frame(notebook)
+        notebook.add(cpu_frame, text="CPU")
+        
+        cpu_text = scrolledtext.ScrolledText(
+            cpu_frame,
+            bg='#1a252f',
+            fg='#ecf0f1',
+            font=('Consolas', 9)
+        )
+        cpu_text.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        cpu_info = f"""
+CPU Information:
+----------------
+Cores: {psutil.cpu_count()} (Physical: {psutil.cpu_count(logical=False)})
+Usage: {psutil.cpu_percent(interval=1)}%
+Frequency: {psutil.cpu_freq().current if psutil.cpu_freq() else 'N/A'} MHz
+        """
+        cpu_text.insert(tk.END, cpu_info)
+        cpu_text.config(state='disabled')
+        
+        # Disk Tab
+        disk_frame = ttk.Frame(notebook)
+        notebook.add(disk_frame, text="Storage")
+        
+        disk_text = scrolledtext.ScrolledText(
+            disk_frame,
+            bg='#1a252f',
+            fg='#ecf0f1',
+            font=('Consolas', 9)
+        )
+        disk_text.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        disk_info = "Disk Usage:\n-----------\n"
+        for partition in psutil.disk_partitions():
+            try:
+                usage = psutil.disk_usage(partition.mountpoint)
+                disk_info += f"\n{partition.device} ({partition.fstype}):\n"
+                disk_info += f"  Total: {usage.total // (1024**3)} GB\n"
+                disk_info += f"  Used: {usage.used // (1024**3)} GB ({usage.percent}%)\n"
+                disk_info += f"  Free: {usage.free // (1024**3)} GB\n"
+            except:
+                continue
+        
+        disk_text.insert(tk.END, disk_info)
+        disk_text.config(state='disabled')
+    
+    def show_location_data(self, data):
+        """Display location information"""
+        main_frame = tk.Frame(self.window, bg='#2c3e50')
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        
+        try:
+            # Get location data
+            g = geocoder.ip('me')
+            location_info = f"""
+Location Information:
+---------------------
+IP Address: {g.ip}
+City: {g.city}
+State: {g.state}
+Country: {g.country}
+Latitude: {g.lat}
+Longitude: {g.lng}
+Postal Code: {g.postal}
+Timezone: {g.timezone}
+            """
+        except Exception as e:
+            location_info = f"Could not retrieve location data: {e}"
+        
+        text_widget = scrolledtext.ScrolledText(
+            main_frame,
+            bg='#1a252f',
+            fg='#ecf0f1',
+            font=('Consolas', 10)
+        )
+        text_widget.pack(fill='both', expand=True)
+        text_widget.insert(tk.END, location_info)
+        text_widget.config(state='disabled')
+        
+        # Add map button if coordinates are available
+        try:
+            if g.lat and g.lng:
+                map_btn = tk.Button(
+                    main_frame,
+                    text="Open in Maps",
+                    command=lambda: webbrowser.open(f"https://maps.google.com/?q={g.lat},{g.lng}"),
+                    bg='#e74c3c',
+                    fg='white'
+                )
+                map_btn.pack(pady=5)
+        except:
+            pass
+    
+    def show_text_data(self, data):
+        """Display simple text data"""
+        text_widget = scrolledtext.ScrolledText(
+            self.window,
+            bg='#1a252f',
+            fg='#ecf0f1',
+            font=('Consolas', 10),
+            wrap=tk.WORD
+        )
+        text_widget.pack(fill='both', expand=True, padx=10, pady=10)
+        text_widget.insert(tk.END, str(data))
+        text_widget.config(state='disabled')
+    
+    def copy_to_clipboard(self, text):
+        """Copy text to clipboard"""
+        self.window.clipboard_clear()
+        self.window.clipboard_append(text)
+        messagebox.showinfo("Copied", "Text copied to clipboard!")
 
 class VoiceAssistantUI:
     def __init__(self, root):
         self.root = root
         self.root.title("JARVIS Voice Assistant - LOCAL VOICE")
-        self.root.geometry("700x600")
+        # Make the main window larger to accommodate bigger logs
+        self.root.geometry("800x700")
         self.root.configure(bg='#2c3e50')
         
         self.base_url = "http://127.0.0.1:8002"
@@ -25,8 +264,8 @@ class VoiceAssistantUI:
         
         # Initialize text-to-speech engine
         self.tts_engine = pyttsx3.init()
-        self.tts_engine.setProperty('rate', 150)  # Speech rate
-        self.tts_engine.setProperty('volume', 0.8)  # Volume level
+        self.tts_engine.setProperty('rate', 150)
+        self.tts_engine.setProperty('volume', 0.8)
         
         self.setup_ui()
         self.setup_microphone()
@@ -106,7 +345,7 @@ class VoiceAssistantUI:
             font=('Arial', 9),
             fg='#ecf0f1',
             bg='#2c3e50',
-            wraplength=660,
+            wraplength=760,  # Increased for larger window
             justify='left'
         )
         self.debug_text.pack(fill='x', pady=2, ipady=2)
@@ -148,6 +387,41 @@ class VoiceAssistantUI:
             width=15
         )
         self.test_btn.pack(side='left', padx=5)
+        
+        # Quick Actions Frame
+        actions_frame = tk.Frame(self.root, bg='#2c3e50')
+        actions_frame.pack(pady=5, fill='x', padx=20)
+        
+        tk.Label(
+            actions_frame,
+            text="Quick Actions:",
+            font=('Arial', 10, 'bold'),
+            fg='#bdc3c7',
+            bg='#2c3e50'
+        ).pack(anchor='w')
+        
+        actions_buttons_frame = tk.Frame(actions_frame, bg='#2c3e50')
+        actions_buttons_frame.pack(fill='x', pady=5)
+        
+        # Quick action buttons for common queries
+        quick_actions = [
+            ("Device Stats", self.show_device_stats),
+            ("Location Info", self.show_location_info),
+            ("System Info", self.show_system_info),
+            ("Network Info", self.show_network_info)
+        ]
+        
+        for text, command in quick_actions:
+            btn = tk.Button(
+                actions_buttons_frame,
+                text=text,
+                command=command,
+                bg='#8e44ad',
+                fg='white',
+                font=('Arial', 9),
+                width=15
+            )
+            btn.pack(side='left', padx=2)
         
         # Manual Command Frame
         command_frame = tk.Frame(self.root, bg='#2c3e50')
@@ -202,7 +476,7 @@ class VoiceAssistantUI:
             font=('Arial', 11),
             fg='#ecf0f1',
             bg='#34495e',
-            wraplength=660,
+            wraplength=760,  # Increased for larger window
             justify='left'
         )
         self.status_text.pack(fill='x', pady=5, ipady=5)
@@ -228,28 +502,7 @@ class VoiceAssistantUI:
         )
         wake_words_text.pack(anchor='w', pady=2)
         
-        # Clarification Frame
-        # clarification_frame = tk.Frame(self.root, bg='#2c3e50')
-        # clarification_frame.pack(pady=5, fill='x', padx=20)
-        
-        # tk.Label(
-        #     clarification_frame,
-        #     text="Clarification Mode:",
-        #     font=('Arial', 10, 'bold'),
-        #     fg='#f39c12',
-        #     bg='#2c3e50'
-        # ).pack(anchor='w')
-        
-        # clarification_text = tk.Label(
-        #     clarification_frame,
-        #     text="🔍 If command is unclear, I will ask for clarification",
-        #     font=('Arial', 9),
-        #     fg='#ecf0f1',
-        #     bg='#2c3e50'
-        # )
-        # clarification_text.pack(anchor='w', pady=2)
-        
-        # Log Frame
+        # Log Frame - Made larger
         log_frame = tk.Frame(self.root, bg='#2c3e50')
         log_frame.pack(pady=10, fill='both', expand=True, padx=20)
         
@@ -264,7 +517,6 @@ class VoiceAssistantUI:
             bg='#2c3e50'
         ).pack(side='left', anchor='w')
         
-        # ADDED: Clear Logs button
         clear_logs_btn = tk.Button(
             log_header_frame,
             text="Clear Logs",
@@ -276,9 +528,10 @@ class VoiceAssistantUI:
         )
         clear_logs_btn.pack(side='right', padx=5)
         
+        # Increased the height of the log text area
         self.log_text = scrolledtext.ScrolledText(
             log_frame,
-            height=15,
+            height=20,  # Increased from 15 to 20
             bg='#1a252f',
             fg='#ecf0f1',
             font=('Consolas', 9),
@@ -287,17 +540,114 @@ class VoiceAssistantUI:
         self.log_text.pack(fill='both', expand=True)
         self.log_text.config(state='disabled')
     
+    def show_device_stats(self):
+        """Show device statistics in a separate window"""
+        try:
+            stats_data = self.get_device_stats()
+            ResultWindow(self.root, "Device Statistics", stats_data, "stats")
+            self.speak_response("Showing device statistics")
+        except Exception as e:
+            self.log_message(f"❌ Error showing device stats: {e}")
+    
+    def show_location_info(self):
+        """Show location information in a separate window"""
+        try:
+            location_data = self.get_location_info()
+            ResultWindow(self.root, "Location Information", location_data, "location")
+            self.speak_response("Showing location information")
+        except Exception as e:
+            self.log_message(f"❌ Error showing location info: {e}")
+    
+    def show_system_info(self):
+        """Show system information"""
+        try:
+            system_data = self.get_system_info()
+            ResultWindow(self.root, "System Information", system_data, "text")
+            self.speak_response("Showing system information")
+        except Exception as e:
+            self.log_message(f"❌ Error showing system info: {e}")
+    
+    def show_network_info(self):
+        """Show network information"""
+        try:
+            network_data = self.get_network_info()
+            ResultWindow(self.root, "Network Information", network_data, "text")
+            self.speak_response("Showing network information")
+        except Exception as e:
+            self.log_message(f"❌ Error showing network info: {e}")
+    
+    def get_device_stats(self):
+        """Get comprehensive device statistics"""
+        return {
+            "system": platform.uname()._asdict(),
+            "memory": dict(psutil.virtual_memory()._asdict()),
+            "cpu": {
+                "cores": psutil.cpu_count(),
+                "usage": psutil.cpu_percent(interval=1),
+                "frequency": psutil.cpu_freq()._asdict() if psutil.cpu_freq() else None
+            },
+            "disk": [dict(psutil.disk_usage(part.mountpoint)._asdict()) for part in psutil.disk_partitions()]
+        }
+    
+    def get_location_info(self):
+        """Get location information"""
+        g = geocoder.ip('me')
+        return g.json if g else {"error": "Could not retrieve location"}
+    
+    def get_system_info(self):
+        """Get system information"""
+        return f"""
+System Information:
+-------------------
+OS: {platform.system()} {platform.release()}
+Version: {platform.version()}
+Architecture: {platform.architecture()[0]}
+Processor: {platform.processor()}
+Hostname: {socket.gethostname()}
+Boot Time: {datetime.fromtimestamp(psutil.boot_time()).strftime('%Y-%m-%d %H:%M:%S')}
+        """
+    
+    def get_network_info(self):
+        """Get network information"""
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        
+        network_info = f"""
+Network Information:
+--------------------
+Hostname: {hostname}
+Local IP: {local_ip}
+        """
+        
+        # Add network interfaces
+        try:
+            interfaces = psutil.net_if_addrs()
+            network_info += "\nNetwork Interfaces:\n"
+            for interface, addrs in interfaces.items():
+                network_info += f"\n{interface}:\n"
+                for addr in addrs:
+                    network_info += f"  {addr.family.name}: {addr.address}\n"
+        except:
+            pass
+        
+        return network_info
+    
     def speak_response(self, text):
-        """Speak the response using text-to-speech"""
-        if self.tts_enabled.get():
+        """Speak the response using text-to-speech - FIXED VERSION"""
+        if self.tts_enabled.get() and text:
             def speak_thread():
                 try:
+                    # Stop any ongoing speech first
+                    self.tts_engine.stop()
+                    # Then speak the new text
                     self.tts_engine.say(text)
                     self.tts_engine.runAndWait()
                 except Exception as e:
                     self.log_message(f"❌ TTS Error: {e}")
             
-            threading.Thread(target=speak_thread, daemon=True).start()
+            # Start speech in a new thread
+            speech_thread = threading.Thread(target=speak_thread, daemon=True)
+            speech_thread.start()
     
     def test_tts(self):
         """Test the text-to-speech functionality"""
@@ -305,97 +655,9 @@ class VoiceAssistantUI:
         self.speak_response(test_text)
         self.log_message("🔊 Testing text-to-speech: 'Hello, I am JARVIS'")
     
-    def ask_clarification(self, command):
-        """Ask for clarification when command is unclear"""
-        clarification_text = f"I'm not sure about your command: '{command}'. Could you please clarify what you want me to do?"
-        
-        # Speak the clarification
-        self.speak_response(clarification_text)
-        
-        # Show in UI
-        self.log_message(f"❓ Clarification requested: {command}")
-        self.status_text.config(text="❓ Please clarify your command")
-        
-        # Optionally show a dialog box for manual clarification
-        self.root.after(0, lambda: self.show_clarification_dialog(command))
-    
-    def show_clarification_dialog(self, original_command):
-        """Show a dialog box for manual clarification"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Clarification Needed")
-        dialog.geometry("400x200")
-        dialog.configure(bg='#2c3e50')
-        dialog.transient(self.root)
-        dialog.grab_set()
-        
-        tk.Label(
-            dialog,
-            text="Clarification Needed",
-            font=('Arial', 12, 'bold'),
-            fg='#f39c12',
-            bg='#2c3e50'
-        ).pack(pady=10)
-        
-        tk.Label(
-            dialog,
-            text=f"Original command: '{original_command}'",
-            font=('Arial', 9),
-            fg='#ecf0f1',
-            bg='#2c3e50',
-            wraplength=380
-        ).pack(pady=5)
-        
-        tk.Label(
-            dialog,
-            text="Please clarify your command:",
-            font=('Arial', 10),
-            fg='#ecf0f1',
-            bg='#2c3e50'
-        ).pack(pady=5)
-        
-        clarification_entry = tk.Entry(dialog, width=40, font=('Arial', 10))
-        clarification_entry.pack(pady=10)
-        clarification_entry.focus()
-        
-        def submit_clarification():
-            clarified_command = clarification_entry.get().strip()
-            if clarified_command:
-                dialog.destroy()
-                self.send_command_to_backend(clarified_command)
-                self.speak_response("Thank you for the clarification. Processing your command now.")
-        
-        def cancel_clarification():
-            dialog.destroy()
-            self.speak_response("Clarification cancelled. Please try your command again.")
-        
-        button_frame = tk.Frame(dialog, bg='#2c3e50')
-        button_frame.pack(pady=10)
-        
-        tk.Button(
-            button_frame,
-            text="Submit",
-            command=submit_clarification,
-            bg='#27ae60',
-            fg='white',
-            width=10
-        ).pack(side='left', padx=5)
-        
-        tk.Button(
-            button_frame,
-            text="Cancel",
-            command=cancel_clarification,
-            bg='#e74c3c',
-            fg='white',
-            width=10
-        ).pack(side='left', padx=5)
-        
-        # Bind Enter key to submit
-        dialog.bind('<Return>', lambda e: submit_clarification())
-    
     def setup_microphone(self):
         """Initialize microphone"""
         try:
-            # Test the microphone
             with self.microphone as source:
                 self.recognizer.adjust_for_ambient_noise(source, duration=1)
             self.log_message("✅ Microphone initialized successfully")
@@ -447,7 +709,6 @@ class VoiceAssistantUI:
         self.update_debug_info("🎤 Listening for wake words...")
         self.log_message("🚀 Voice recognition started - waiting for wake word")
         
-        # Start voice recognition in a separate thread
         self.voice_thread = threading.Thread(target=self.voice_recognition_loop, daemon=True)
         self.voice_thread.start()
         
@@ -465,7 +726,6 @@ class VoiceAssistantUI:
         def test_thread():
             self.update_debug_info("Testing microphone... Speak now!")
             try:
-                # Create a new microphone instance for testing to avoid context issues
                 test_mic = sr.Microphone()
                 with test_mic as source:
                     self.recognizer.adjust_for_ambient_noise(source, duration=1)
@@ -487,27 +747,23 @@ class VoiceAssistantUI:
         threading.Thread(target=test_thread, daemon=True).start()
     
     def voice_recognition_loop(self):
-        """Main voice recognition loop - FIXED VERSION"""
+        """Main voice recognition loop"""
         self.log_message("🎧 Voice recognition loop started")
         
-        # Use a single microphone context for the entire loop
         with self.microphone as source:
             self.recognizer.adjust_for_ambient_noise(source, duration=1)
             
             while self.is_listening:
                 try:
-                    # Listen for wake word
                     self.update_debug_info("👂 Listening for wake word...")
                     self.status_text.config(text="👂 Listening... Say 'JARVIS'")
                     
-                    # Listen with shorter timeout for responsiveness
                     audio = self.recognizer.listen(source, timeout=2, phrase_time_limit=3)
                     text = self.recognizer.recognize_google(audio).lower()
                     
                     self.log_message(f"🎙️ Heard: '{text}'")
                     self.update_debug_info(f"Heard: '{text}'")
                     
-                    # Check for wake words
                     wake_word_detected = False
                     detected_word = ""
                     for wake_word in self.wake_words:
@@ -519,29 +775,25 @@ class VoiceAssistantUI:
                     if wake_word_detected:
                         self.log_message(f"🔔 Wake word '{detected_word}' detected!")
                         self.update_debug_info(f"🚨 Wake word detected! Listening for command...")
-                        
-                        # Listen for command immediately
                         self.listen_for_command(source)
                         
                 except sr.WaitTimeoutError:
-                    continue  # No speech detected, continue listening
+                    continue
                 except sr.UnknownValueError:
-                    # Speech was unintelligible, continue listening
                     continue
                 except sr.RequestError as e:
                     self.log_message(f"❌ Speech recognition API error: {e}")
-                    time.sleep(2)  # Wait before retrying
+                    time.sleep(2)
                 except Exception as e:
                     self.log_message(f"❌ Voice recognition error: {e}")
-                    time.sleep(1)  # Wait before retrying
+                    time.sleep(1)
     
     def listen_for_command(self, source):
-        """Listen for command after wake word - FIXED VERSION"""
+        """Listen for command after wake word"""
         try:
             self.status_text.config(text="🎯 Listening for command... Speak now!")
             self.update_debug_info("🎤 Listening for command...")
             
-            # Use the same source that's already in context
             audio = self.recognizer.listen(source, timeout=6, phrase_time_limit=6)
             command = self.recognizer.recognize_google(audio)
             
@@ -549,8 +801,6 @@ class VoiceAssistantUI:
             self.update_debug_info(f"✅ Command: '{command}'")
             self.status_text.config(text=f"📡 Sending command to backend: {command}")
             
-            # REMOVED: Clarification check
-            # Send command directly to backend
             self.send_command_to_backend(command)
             
         except sr.WaitTimeoutError:
@@ -566,34 +816,11 @@ class VoiceAssistantUI:
             self.update_debug_info(f"❌ Command error: {e}")
             self.status_text.config(text="❌ Error listening for command")
     
-    def needs_clarification(self, command):
-        """Determine if a command needs clarification"""
-        command_lower = command.lower()
-        
-        # Commands that are likely unclear
-        unclear_indicators = [
-            "this", "that", "it", "something", "thing",
-            "do something", "help me", "what", "how"
-        ]
-        
-        # Very short commands might need clarification
-        if len(command.split()) <= 2:
-            return True
-            
-        # Check for unclear indicators
-        for indicator in unclear_indicators:
-            if indicator in command_lower:
-                return True
-                
-        return False
-    
     def format_response_for_speech(self, result):
-        """Format the backend response for clear speech - FIXED VERSION"""
+        """Format the backend response for clear speech"""
         try:
-            # First, try to extract the main content from the response
             speech_text = ""
             
-            # Check if there's a direct message or result
             if "result" in result:
                 response_data = result["result"]
             elif "response" in result:
@@ -603,12 +830,9 @@ class VoiceAssistantUI:
             else:
                 response_data = result
             
-            # Handle different response formats
             if isinstance(response_data, str):
-                # If it's a string, use it directly
                 speech_text = response_data
             elif isinstance(response_data, dict):
-                # Extract meaningful content from dictionary
                 if "content" in response_data:
                     speech_text = response_data["content"]
                 elif "output" in response_data:
@@ -620,7 +844,6 @@ class VoiceAssistantUI:
                 elif "status" in response_data:
                     speech_text = f"Command completed with status: {response_data['status']}"
                 else:
-                    # Try to find any string value in the dict
                     for key, value in response_data.items():
                         if isinstance(value, str) and len(value) > 0:
                             speech_text = value
@@ -628,7 +851,6 @@ class VoiceAssistantUI:
                     if not speech_text:
                         speech_text = "Command executed successfully."
             elif isinstance(response_data, list):
-                # If it's a list, try to extract meaningful content
                 if len(response_data) > 0:
                     first_item = response_data[0]
                     if isinstance(first_item, str):
@@ -640,9 +862,7 @@ class VoiceAssistantUI:
             else:
                 speech_text = "Command executed successfully."
             
-            # Clean up the speech text
             if speech_text:
-                # Remove excessive whitespace and limit length for speech
                 speech_text = ' '.join(str(speech_text).split())
                 if len(speech_text) > 300:
                     speech_text = speech_text[:300] + "... Check the log for full details."
@@ -654,7 +874,7 @@ class VoiceAssistantUI:
             return "Command executed. Check the log for details."
     
     def send_command_to_backend(self, command):
-        """Send command to backend /file-agent endpoint - IMPROVED VERSION"""
+        """Send command to backend /file-agent endpoint"""
         def send_thread():
             try:
                 self.log_message(f"📤 Sending to backend: '{command}'")
@@ -677,10 +897,13 @@ class VoiceAssistantUI:
                     self.update_debug_info("✅ Command executed successfully")
                     self.status_text.config(text="✅ Command executed successfully")
                     
-                    # Log the full result for debugging
+                    # Log the full result
                     self.log_message(f"   Full response: {json.dumps(result, indent=2)}")
                     
-                    # Speak the response - with better extraction
+                    # Open result in separate window only for specific queries (not for app launches)
+                    self.handle_backend_response(command, result)
+                    
+                    # Speak the response - ALWAYS speak the response
                     response_text = self.format_response_for_speech(result)
                     self.log_message(f"🔊 Speech content: {response_text}")
                     self.speak_response(response_text)
@@ -700,6 +923,36 @@ class VoiceAssistantUI:
                 self.speak_response(f"Error sending command to backend. Please check the connection.")
         
         threading.Thread(target=send_thread, daemon=True).start()
+    
+    def handle_backend_response(self, command, result):
+        """Handle backend response and open appropriate windows - FIXED VERSION"""
+        command_lower = command.lower()
+        
+        # List of commands that should NOT open dialog windows
+        app_launch_commands = [
+            'open', 'launch', 'start', 'run', 'execute',
+            'notepad', 'calculator', 'browser', 'chrome', 'firefox', 'edge',
+            'surf', 'browse', 'search', 'google', 'youtube', 'website'
+        ]
+        
+        # Check if this is an application launch command
+        is_app_launch = any(word in command_lower for word in app_launch_commands)
+        
+        # Only open dialog windows for information queries, not app launches
+        if not is_app_launch:
+            # Check if result contains complex data that should be shown in a window
+            if isinstance(result, (dict, list)) and len(str(result)) > 200:
+                # Open JSON data in separate window
+                ResultWindow(self.root, f"Result: {command}", result, "json")
+            
+            # Specific command handlers for information queries only
+            if any(word in command_lower for word in ['stat', 'info', 'detail', 'show', 'display', 'get']):
+                if any(word in command_lower for word in ['device', 'system', 'computer', 'hardware']):
+                    ResultWindow(self.root, "Device Statistics", self.get_device_stats(), "stats")
+                elif any(word in command_lower for word in ['location', 'where', 'ip', 'address']):
+                    ResultWindow(self.root, "Location Information", self.get_location_info(), "location")
+                elif any(word in command_lower for word in ['network', 'connection', 'wifi', 'ethernet']):
+                    ResultWindow(self.root, "Network Information", self.get_network_info(), "text")
 
 def main():
     root = tk.Tk()

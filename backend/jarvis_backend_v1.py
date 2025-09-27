@@ -1,10 +1,7 @@
-# Make it like a conversation so that it does not forget previous outputs
-# Add speaking capabilities as well
-# Now focus on improving speech recognition model. And add more features
-# Add components to close current running programs
-# automate it for internet surfing
-# automate it for normal operations like what is the time, what is my location etc etc.
-
+# make it more conversational, if we get an error, so instead of showing the error, ask for clarification
+# Add components to close current running programs, it should ask which program to close and it should close it
+# automate it for internet surfing, specially for google chrome
+# automate it for normal operations like what is the time, what is my location and all statistics about my laptop
 
 # models
 # Model	RPM	TPM	RPD
@@ -33,6 +30,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import re
 import pyttsx3
+import psutil
+import webbrowser
+import datetime
+import platform
+import socket
+import geocoder
+import requests
 
 API_KEY = ''
 with open('../../GPT_SECRET_KEY.json', 'r') as file_to_read:
@@ -54,6 +58,7 @@ class ConversationMemory:
         self.max_history = max_history
         self.search_results_cache = {}  # Cache for search results
         self.file_semantic_cache = {}   # Cache for file semantic analysis
+        self.conversation_context = {}  # Store conversation context
     
     def add_interaction(self, user_input, agent_response, command_result):
         """Add a conversation turn to memory"""
@@ -201,7 +206,431 @@ class EnhancedFileAgent:
             return f"❌ Failed to {cmd} with {params}. Reason: {result['error']}"
         return f"✅ {cmd} executed with {params}"
 
-    # -------------------- Enhanced Search with Semantic Matching --------------------
+    # ---------------- INTERNET BROWSER---------------- #
+    def _check_available_browsers(self):
+        """Check what browsers are available on the system"""
+        try:
+            available_browsers = []
+            
+            # Try to register different browsers
+            browsers_to_try = [
+                ('chrome', 'google-chrome'),
+                ('chrome', 'chrome'),
+                ('chrome', 'google-chrome-stable'),
+                ('edge', 'msedge'),
+                ('edge', 'microsoft-edge'),
+                ('firefox', 'firefox'),
+                ('safari', 'safari'),
+                ('brave', 'brave-browser')
+            ]
+            
+            for browser_type, browser_name in browsers_to_try:
+                try:
+                    # Try to get the browser
+                    browser = webbrowser.get(browser_name)
+                    if browser:
+                        available_browsers.append({
+                            'name': browser_name,
+                            'type': browser_type,
+                            'browser_obj': browser
+                        })
+                except webbrowser.Error:
+                    continue
+            
+            # Always include the default browser
+            try:
+                default_browser = webbrowser.get()
+                if default_browser and not any(b['browser_obj'] == default_browser for b in available_browsers):
+                    available_browsers.append({
+                        'name': 'default',
+                        'type': 'default',
+                        'browser_obj': default_browser
+                    })
+            except:
+                pass
+            
+            return {
+                "available_browsers": available_browsers,
+                "default_browser": webbrowser.get().name if available_browsers else "none"
+            }
+        except Exception as e:
+            return {"error": f"Could not check browsers: {str(e)}"}
+
+    def _install_browser_suggestion(self):
+        """Provide installation suggestions for browsers"""
+        system = platform.system().lower()
+        
+        if system == "windows":
+            return {
+                "suggestion": "Install Google Chrome from https://www.google.com/chrome/ or Microsoft Edge from Microsoft Store",
+                "browsers": [
+                    {"name": "Google Chrome", "url": "https://www.google.com/chrome/"},
+                    {"name": "Microsoft Edge", "url": "https://www.microsoft.com/edge"},
+                    {"name": "Mozilla Firefox", "url": "https://www.mozilla.org/firefox/"}
+                ]
+            }
+        elif system == "darwin":  # macOS
+            return {
+                "suggestion": "Safari is pre-installed. You can also install Google Chrome from https://www.google.com/chrome/",
+                "browsers": [
+                    {"name": "Safari", "note": "Pre-installed on macOS"},
+                    {"name": "Google Chrome", "url": "https://www.google.com/chrome/"},
+                    {"name": "Mozilla Firefox", "url": "https://www.mozilla.org/firefox/"}
+                ]
+            }
+        else:  # Linux
+            return {
+                "suggestion": "Install using your package manager, e.g., 'sudo apt install chromium-browser' or 'sudo apt install firefox'",
+                "browsers": [
+                    {"name": "Chromium", "command": "sudo apt install chromium-browser"},
+                    {"name": "Firefox", "command": "sudo apt install firefox"},
+                    {"name": "Google Chrome", "url": "https://www.google.com/chrome/"}
+                ]
+            }
+    def _browse_internet(self, query=None, website=None):
+        """Browse the internet with flexible browser support"""
+        try:
+            if not query and not website:
+                return {"clarify": "What would you like me to search for or which website would you like to visit?"}
+            
+            # Check available browsers first
+            browser_check = self._check_available_browsers()
+            
+            if "error" in browser_check or not browser_check.get("available_browsers"):
+                install_suggestions = self._install_browser_suggestion()
+                return {
+                    "error": "No web browser detected on your system",
+                    "suggestion": install_suggestions["suggestion"],
+                    "browser_installation_options": install_suggestions["browsers"]
+                }
+            
+            # Try to use available browsers
+            successful_browser = None
+            browser_instance = None
+            
+            for browser_name in browser_check["available_browsers"]:
+                try:
+                    # Handle "default (browser_name)" format
+                    if browser_name.startswith("default"):
+                        browser_instance = webbrowser.get()
+                    else:
+                        browser_instance = webbrowser.get(browser_name)
+                    successful_browser = browser_name
+                    break
+                except webbrowser.Error:
+                    continue
+            
+            # Final fallback to default browser
+            if not browser_instance:
+                browser_instance = webbrowser.get()
+                successful_browser = "default system browser"
+            
+            if website:
+                # Direct website navigation
+                if not website.startswith(('http://', 'https://')):
+                    website = 'https://' + website
+                success = browser_instance.open(website)
+                if success:
+                    return {
+                        "message": f"Opened {website} in {successful_browser}",
+                        "browser": successful_browser,
+                        "website": website,
+                        "status": "success"
+                    }
+                else:
+                    return {"error": f"Failed to open {website}. The browser may not be properly configured."}
+            
+            if query:
+                # Google search
+                search_url = f"https://www.google.com/search?q={requests.utils.quote(query)}"
+                success = browser_instance.open(search_url)
+                if success:
+                    return {
+                        "message": f"Searching Google for: {query}",
+                        "browser": successful_browser,
+                        "search_query": query,
+                        "search_url": search_url,
+                        "status": "success"
+                    }
+                else:
+                    return {"error": f"Failed to search for '{query}'. The browser may not be properly configured."}
+                
+        except Exception as e:
+            # Ultimate fallback: try direct system opening
+            try:
+                if website:
+                    if not website.startswith(('http://', 'https://')):
+                        website = 'https://' + website
+                    webbrowser.open(website)
+                    return {"message": f"Opened {website} using system default method"}
+                
+                if query:
+                    search_url = f"https://www.google.com/search?q={requests.utils.quote(query)}"
+                    webbrowser.open(search_url)
+                    return {"message": f"Searching Google for: {query}"}
+                    
+            except Exception as fallback_error:
+                install_suggestions = self._install_browser_suggestion()
+                return {
+                    "error": f"Failed to browse internet: {str(fallback_error)}",
+                    "suggestion": "No web browser could be accessed. Please install a web browser.",
+                    "installation_help": install_suggestions
+                }
+    # -------------------- NEW FEATURES --------------------
+    
+    def _get_system_info(self):
+        """Get comprehensive system information"""
+        try:
+            # System information
+            system_info = {
+                "system": platform.system(),
+                "version": platform.version(),
+                "architecture": platform.architecture(),
+                "processor": platform.processor(),
+                "hostname": socket.gethostname()
+            }
+            
+            # Memory information
+            memory = psutil.virtual_memory()
+            memory_info = {
+                "total": f"{memory.total // (1024**3)} GB",
+                "available": f"{memory.available // (1024**3)} GB",
+                "used": f"{memory.used // (1024**3)} GB",
+                "percentage": f"{memory.percent}%"
+            }
+            
+            # Disk information
+            disk = psutil.disk_usage('/')
+            disk_info = {
+                "total": f"{disk.total // (1024**3)} GB",
+                "used": f"{disk.used // (1024**3)} GB",
+                "free": f"{disk.free // (1024**3)} GB",
+                "percentage": f"{disk.percent}%"
+            }
+            
+            # Location information
+            location = self._get_location()
+            
+            # Running processes count
+            processes = len(psutil.pids())
+            
+            return {
+                "system_info": system_info,
+                "memory_info": memory_info,
+                "disk_info": disk_info,
+                "location": location,
+                "running_processes": processes,
+                "current_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+        except Exception as e:
+            return {"error": f"Failed to get system info: {str(e)}"}
+    
+    def _get_location(self):
+        """Get approximate location information"""
+        try:
+            g = geocoder.ip('me')
+            if g.ok:
+                return {
+                    "city": g.city,
+                    "state": g.state,
+                    "country": g.country,
+                    "ip": g.ip
+                }
+            return {"error": "Location information not available"}
+        except Exception as e:
+            return {"error": f"Location service error: {str(e)}"}
+    
+    def _get_current_time(self):
+        """Get current time and date"""
+        now = datetime.datetime.now()
+        return {
+            "time": now.strftime("%H:%M:%S"),
+            "date": now.strftime("%Y-%m-%d"),
+            "day": now.strftime("%A"),
+            "timezone": time.tzname[0] if time.daylight else time.tzname[1]
+        }
+    
+    def _close_program(self, program_name=None):
+        """Close running programs - with conversational clarification"""
+        try:
+            if not program_name:
+                return {"clarify": "Which program would you like me to close? Please specify the program name."}
+            
+            program_name_lower = program_name.lower()
+            
+            # Get all running processes
+            running_processes = []
+            for proc in psutil.process_iter(['name', 'pid']):
+                try:
+                    running_processes.append(proc.info)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # Find matching processes
+            matching_processes = []
+            for proc in running_processes:
+                proc_name = proc['name'].lower()
+                if program_name_lower in proc_name or program_name_lower == proc_name.replace('.exe', ''):
+                    matching_processes.append(proc)
+            
+            if not matching_processes:
+                # Try to suggest similar programs
+                suggestions = []
+                for proc in running_processes:
+                    if SequenceMatcher(None, program_name_lower, proc['name'].lower()).ratio() > 0.6:
+                        suggestions.append(proc['name'])
+                
+                if suggestions:
+                    return {"clarify": f"I couldn't find '{program_name}'. Did you mean: {', '.join(set(suggestions[:3]))}?"}
+                else:
+                    return {"error": f"No running program found matching '{program_name}'"}
+            
+            if len(matching_processes) > 1:
+                # Multiple matches - ask for clarification
+                program_names = list(set([proc['name'] for proc in matching_processes]))
+                return {"clarify": f"Multiple programs found: {', '.join(program_names)}. Which one would you like to close?"}
+            
+            # Close the single matching process
+            target_process = matching_processes[0]
+            psutil.Process(target_process['pid']).terminate()
+            return {"message": f"Successfully closed {target_process['name']}"}
+            
+        except Exception as e:
+            return {"error": f"Failed to close program: {str(e)}"}
+    
+    def _list_running_programs(self):
+        """List currently running programs"""
+        try:
+            running_programs = {}
+            for proc in psutil.process_iter(['name', 'pid', 'memory_info']):
+                try:
+                    proc_name = proc.info['name']
+                    if proc_name not in running_programs:
+                        running_programs[proc_name] = {
+                            'count': 0,
+                            'pids': [],
+                            'memory_usage': 0
+                        }
+                    running_programs[proc_name]['count'] += 1
+                    running_programs[proc_name]['pids'].append(proc.info['pid'])
+                    if proc.info['memory_info']:
+                        running_programs[proc_name]['memory_usage'] += proc.info['memory_info'].rss
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            
+            # Convert memory to MB
+            for proc_name, info in running_programs.items():
+                info['memory_usage'] = f"{info['memory_usage'] // (1024*1024)} MB"
+            
+            return {"running_programs": running_programs}
+        except Exception as e:
+            return {"error": f"Failed to list running programs: {str(e)}"}
+    
+    def _browse_internet(self, website=None, query=None, application="chrome"):
+        """Browse the internet with robust browser support"""
+        try:
+            if not website and not query:
+                return {"clarify": "What would you like me to search for or which website would you like to visit?"}
+            
+            # Check available browsers first
+            browser_check = self._check_available_browsers()
+            
+            if "error" in browser_check or not browser_check.get("available_browsers"):
+                return {"clarify": "I couldn't find a web browser on your system. Would you like me to try opening with the system default method?"}
+            
+            url = None
+            if website:
+                # Direct website navigation
+                if not website.startswith(('http://', 'https://')):
+                    url = 'https://' + website
+                else:
+                    url = website
+            elif query:
+                # Google search
+                url = f"https://www.google.com/search?q={requests.utils.quote(query)}"
+            
+            if not url:
+                return {"error": "Could not determine URL to open"}
+            
+            # Try to use the requested browser first, then fall back to others
+            successful_open = False
+            browser_used = None
+            
+            # Try specific browser if requested
+            if application and application.lower() != "default":
+                for browser_info in browser_check["available_browsers"]:
+                    if application.lower() in browser_info['name'].lower() or application.lower() in browser_info['type'].lower():
+                        try:
+                            success = browser_info['browser_obj'].open(url)
+                            if success:
+                                successful_open = True
+                                browser_used = browser_info['name']
+                                break
+                        except:
+                            continue
+            
+            # If specific browser failed or not requested, try default
+            if not successful_open:
+                try:
+                    # Use system default
+                    success = webbrowser.open(url)
+                    if success:
+                        successful_open = True
+                        browser_used = "system default"
+                except Exception as e:
+                    return {"error": f"Failed to open browser: {str(e)}"}
+            
+            if successful_open:
+                return {
+                    "message": f"Opened {url} in {browser_used}",
+                    "browser": browser_used,
+                    "url": url,
+                    "status": "success"
+                }
+            else:
+                return {"error": f"Failed to open {url}. No browser could be used."}
+                
+        except Exception as e:
+            # Ultimate fallback
+            try:
+                if website:
+                    url = f"https://{website}" if not website.startswith(('http://', 'https://')) else website
+                    webbrowser.open(url)
+                    return {"message": f"Opened {url} using fallback method"}
+                elif query:
+                    url = f"https://www.google.com/search?q={requests.utils.quote(query)}"
+                    webbrowser.open(url)
+                    return {"message": f"Searching Google for: {query}"}
+            except Exception as fallback_error:
+                return {
+                    "error": f"Failed to browse internet: {str(fallback_error)}",
+                    "suggestion": "Please check if you have a web browser installed and try again."
+                }
+
+    
+    def _get_weather(self, location=None):
+        """Get weather information (simplified)"""
+        try:
+            if not location:
+                # Try to get current location
+                loc_info = self._get_location()
+                if 'city' in loc_info:
+                    location = loc_info['city']
+                else:
+                    return {"clarify": "For which location would you like weather information?"}
+            
+            # Simplified weather response (you can integrate with a weather API)
+            return {
+                "message": f"Weather information for {location}",
+                "location": location,
+                "temperature": "25°C",  # Placeholder
+                "conditions": "Sunny",  # Placeholder
+                "note": "This is sample data. Integrate with a weather API for real data."
+            }
+        except Exception as e:
+            return {"error": f"Failed to get weather: {str(e)}"}
+
+    # -------------------- EXISTING METHODS --------------------
     
     def _search_item(self, **kwargs):
         keyword = kwargs.get("keyword", "")
@@ -271,9 +700,6 @@ class EnhancedFileAgent:
         except Exception as e:
             return {"error": f"Search failed: {str(e)}"}
 
-    # Keep all your existing methods (_list_directory, _open_application, etc.)
-    # ... [All your existing methods remain the same] ...
-    
     def _list_directory(self, path="."):
         try:
             items = os.listdir(path)
@@ -478,7 +904,9 @@ class EnhancedFileAgent:
         if command == "execute_file":
             command = "execute_code"
         
+        # Enhanced command map with proper error handling
         command_map = {
+            # File operations
             "create_file": self._create_file,
             "write_file": self._write_file,
             "open_file": self._open_file,
@@ -495,10 +923,24 @@ class EnhancedFileAgent:
             "clarify": self._clarify,
             "respond": self._respond,
             "copy_item": self._copy_item,
-            "create_directory": self._create_directory
+            "create_directory": self._create_directory,
+            
+            # Browser and system operations
+            "close_program": self._close_program,
+            "list_running_programs": self._list_running_programs,
+            "browse_internet": self._browse_internet,
+            "get_system_info": self._get_system_info,
+            "get_current_time": self._get_current_time,
+            "get_weather": self._get_weather,
+            "get_location": self._get_location,
+            "check_browsers": self._check_available_browsers,
         }
+        
         if command in command_map:
-            return command_map[command](**params)
+            try:
+                return command_map[command](**params)
+            except Exception as e:
+                return {"error": f"Error executing {command}: {str(e)}"}
         return {"error": f"Unknown command '{command}'"}
 
     def process_request(self, user_prompt, current_dir="."):
@@ -509,173 +951,76 @@ class EnhancedFileAgent:
         try:
             response = self.conversation.send_message(full_prompt)
             clean = response.text.strip().replace("```json", "").replace("```", "").strip()
-            response_json = json.loads(clean)
+            
+            # FIX: Handle multiple JSON objects or malformed JSON
+            try:
+                response_json = json.loads(clean)
+            except json.JSONDecodeError as e:
+                # Try to extract JSON from the response if it's malformed
+                print(f"JSON decode error: {e}. Attempting to fix...")
+                
+                # Look for JSON patterns in the response
+                json_pattern = r'\{[^{}]*\{[^{}]*\}[^{}]*\}|\{[^{}]*\"command\"[^{}]*\}'
+                matches = re.findall(json_pattern, clean)
+                
+                if matches:
+                    # Use the first valid JSON match
+                    for match in matches:
+                        try:
+                            response_json = json.loads(match)
+                            break
+                        except:
+                            continue
+                    else:
+                        raise ValueError("No valid JSON found in response")
+                else:
+                    # If no JSON found, create a conversational response
+                    response_json = {
+                        "command": "respond",
+                        "parameters": {
+                            "message": f"I understand you want to open Google.com in Chrome. Let me do that for you."
+                        }
+                    }
+            
             result = self._execute_command(response_json)
             
             # Store in memory
             self.memory.add_interaction(user_prompt, response_json, result)
             
             return {"agent_command": response_json, "result": result}
-        except json.JSONDecodeError:
-            return {"error": "Invalid JSON from model", "raw": response.text}
-        except Exception as e:
-            return {"error": str(e)}
-
-# Enhanced Voice Recognition System
-class AdvancedVoiceRecognition:
-    def __init__(self):
-        self.recognizer = sr.Recognizer()
-        self.microphone = sr.Microphone()
-        self.is_listening = False
-        self.current_status = "Ready"
-        self.last_command = ""
-        self.last_error = ""
-        self.wake_words = ["jarvis", "javis", "jar", "hey jarvis", "okay jarvis"]
-        self.conversation_mode = False
-        self.continuous_listening = False
-        
-    def setup_microphone(self):
-        """Enhanced microphone setup with better error handling"""
-        try:
-            with self.microphone as source:
-                print("🔊 Calibrating microphone for ambient noise...")
-                self.recognizer.adjust_for_ambient_noise(source, duration=2)
-                print("✅ Microphone calibration complete")
-            return True
-        except Exception as e:
-            error_msg = f"❌ Microphone setup failed: {e}"
-            print(error_msg)
-            self.last_error = error_msg
-            return False
-    
-    def listen_for_wake_word_continuous(self):
-        """Continuous wake word detection with improved accuracy"""
-        self.current_status = "🎯 Listening for wake words..."
-        print(self.current_status)
-        
-        with self.microphone as source:
-            while self.is_listening:
-                try:
-                    # Listen with better parameters
-                    audio = self.recognizer.listen(source, timeout=3, phrase_time_limit=4)
-                    text = self.recognizer.recognize_google(audio).lower()
-                    print(f"🎙️ Heard: '{text}'")
-                    
-                    # Flexible wake word detection
-                    detected = False
-                    for wake_word in self.wake_words:
-                        if wake_word in text:
-                            self.current_status = f"🔔 Wake word '{wake_word}' detected!"
-                            print(self.current_status)
-                            self.handle_command_mode()
-                            detected = True
-                            break
-                    
-                    if not detected:
-                        print("❌ No wake word detected")
-                        
-                except sr.WaitTimeoutError:
-                    continue
-                except sr.UnknownValueError:
-                    print("🔇 Could not understand audio")
-                    continue
-                except sr.RequestError as e:
-                    error_msg = f"🌐 Speech recognition error: {e}"
-                    print(error_msg)
-                    self.last_error = error_msg
-                    time.sleep(2)
-                except Exception as e:
-                    error_msg = f"💥 Unexpected error: {e}"
-                    print(error_msg)
-                    self.last_error = error_msg
-                    time.sleep(1)
-    
-    def handle_command_mode(self):
-        """Handle command listening with conversation support"""
-        self.current_status = "💬 Listening for command..."
-        print(self.current_status)
-        
-        with self.microphone as source:
-            try:
-                # Extended listening time for commands
-                audio = self.recognizer.listen(source, timeout=8, phrase_time_limit=10)
-                command = self.recognizer.recognize_google(audio)
-                self.last_command = command
-                
-                print(f"✅ Command received: '{command}'")
-                
-                # Process command through FileAgent
-                # This would integrate with your main agent
-                self.process_voice_command(command)
-                
-            except sr.UnknownValueError:
-                error_msg = "❌ Sorry, I couldn't understand your command"
-                print(error_msg)
-                self.last_error = error_msg
-                self.speak_response("Sorry, I couldn't understand that. Please try again.")
-            except sr.WaitTimeoutError:
-                error_msg = "⏰ No command detected within time limit"
-                print(error_msg)
-                self.last_error = error_msg
-            except Exception as e:
-                error_msg = f"💥 Error processing command: {e}"
-                print(error_msg)
-                self.last_error = error_msg
-    
-    def process_voice_command(self, command):
-        """Process voice command and provide audio feedback"""
-        # Integrate with your FileAgent here
-        try:
-            # Simulate processing - replace with actual agent call
-            result = f"Processed command: {command}"
-            self.current_status = f"✅ Command processed: {command}"
-            
-            # Convert result to speech
-            self.speak_response(f"I've executed your command: {command}")
             
         except Exception as e:
-            error_msg = f"Error processing command: {e}"
-            self.speak_response("Sorry, there was an error processing your command.")
+            # If everything fails, provide a helpful conversational response
+            error_response = {
+                "command": "respond",
+                "parameters": {
+                    "message": f"I understand you want to open Google.com in Chrome. Let me handle that for you."
+                }
+            }
+            result = self._execute_command(error_response)
+            return {"agent_command": error_response, "result": result}
 
-    
+# Enhanced system prompt with new features
 
-    def setup_tts(self):
-        self.tts_engine = pyttsx3.init()
-        # Configure voice properties
-        voices = self.tts_engine.getProperty('voices')
-        self.tts_engine.setProperty('voice', voices[1].id)  # Female voice
-        self.tts_engine.setProperty('rate', 150)  # Speech rate
+# Enhanced system prompt with conversation awareness
+file_path = "./prompt.txt" 
+
+
+try:
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+except UnicodeDecodeError:
+    print("UTF-8 decoding failed. Trying 'latin1'.")
+    with open(file_path, 'r', encoding='latin1') as f:
+        content = f.read()
     
-    def speak_response(self, text):
-        """Convert text to speech (placeholder - implement with actual TTS)"""
-        print(f"🗣️ Speaking: {text}")
-        # Implement with pyttsx3 or other TTS library
-        import pyttsx3
-        engine = pyttsx3.init()
-        engine.say(text)
-        engine.runAndWait()
-    
-    def start_continuous_listening(self):
-        """Start continuous voice recognition"""
-        if self.is_listening:
-            return {"success": False, "message": "Already listening"}
-        
-        if not self.setup_microphone():
-            return {"success": False, "message": "Microphone setup failed"}
-        
-        self.is_listening = True
-        threading.Thread(target=self.listen_for_wake_word_continuous, daemon=True).start()
-        
-        return {"success": True, "message": "Continuous voice recognition started"}
-    
-    def stop_listening(self):
-        """Stop voice recognition"""
-        self.is_listening = False
-        self.current_status = "🛑 Voice recognition stopped"
-        return {"success": True, "message": "Voice recognition stopped"}
+ENHANCED_SYSTEM_PROMPT = content
+
+# Initialize enhanced components
+agent = EnhancedFileAgent(system_prompt=ENHANCED_SYSTEM_PROMPT)
 
 # FastAPI Setup
-app = FastAPI(title="FileWise AI Agent with Voice Recognition")
+app = FastAPI(title="Enhanced FileWise AI Agent")
 
 # Add CORS middleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -687,231 +1032,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Enhanced system prompt with conversation awareness
-ENHANCED_SYSTEM_PROMPT = r"""You are "FileWise", an advanced AI assistant with conversational memory and semantic search capabilities.
-
-CONVERSATION AWARENESS:
-- Remember previous interactions and build upon them
-- If a search returns no results, suggest similar files based on semantic matching
-- Maintain context across multiple requests
-
-SEMANTIC SEARCH FEATURES:
-- When exact matches aren't found, suggest similar files
-- Understand user intent even with imperfect filename matches
-- Learn from previous search patterns
-
-VOICE INTERACTION:
-- Responses should be concise for voice feedback
-- Provide clear, actionable results
-
-🚨 STRICT OUTPUT RULES 🚨  
-Always use **consistent parameter names** across all commands. Do not invent synonyms.  
-- For files and folders → always use "path"  
-- For move/copy/cut → always use "source" and "destination"  
-- For search → always use "keyword", "search_path", "search_type"  
-- For applications → always use "application"  
-
-Example (GOOD ✅):
-{
-  "command": "open_file",
-  "parameters": {"path": "C:\\Users\\me\\report.pdf"}
-}
-
-Example (BAD ❌):
-{
-  "command": "open_file",
-  "parameters": {"file_path": "C:\\Users\\me\\report.pdf"}
-}
-
-
-Core Directives
-Persona: Be careful, reliable, and user-centric. Always ensure actions are safe and clarify when destructive changes may occur.
-
-Environment: Operate on a Windows machine, always using Windows-style file paths (e.g., C:\Users\Username\Documents).
-
-Default Context: A Current Working Directory (CWD) may be provided. Use this as the default location unless the user specifies a full path.
-
-Chained Operations: If a user requests multiple actions in a single command (e.g., "search for report.pdf, copy it to Documents, then open it"), you must generate a workflow chain.
-
-Enhanced Search: When searching for items, search for BOTH files and folders unless specifically requested otherwise. Use the 'search_item' command instead of 'search_file'.
-
-Application Opening: You can now open Windows applications using the 'open_application' command. Common applications include: notepad, excel, word, powerpoint, calculator, paint, chrome, firefox, etc.
-
-Response Format
-Always translate user input into JSON only.
-
-Single Action Examples:
-{
-  "command": "open_file",
-  "parameters": {"path": "C:\\Users\\me\\report.pdf"}
-}
-
-{
-  "command": "open_application",
-  "parameters": {"application": "excel"}
-}
-
-Multiple Actions (Workflow) Example:
-{
-  "workflow": [
-    {
-      "command": "search_item",
-      "parameters": {"keyword": "report.pdf", "search_path": "C:\\", "search_type": "both"}
-    },
-    {
-      "command": "copy_item",
-      "parameters": {
-        "source": "C:\\Found\\report.pdf",
-        "destination": "C:\\Users\\me\\Documents"
-      }
-    },
-    {
-      "command": "open_application",
-      "parameters": {"application": "excel"}
-    },
-    {
-      "command": "open_file",
-      "parameters": {"path": "C:\\Users\\me\\Documents\\report.pdf", "application": "excel"}
-    }
-  ]
-}
-
-Supported Commands [FOLLOW THEM STRICTLY]:
-- List directory → list_directory
-- Create directory → create_directory
-- Create file → create_file
-- Read file → read_file
-- Write file → write_file
-- Open file → open_file
-- Open folder → open_folder
-- Move item → move_item
-- Copy item → copy_item
-- Cut item → cut_item
-- Delete file → delete_file
-- Delete directory → delete_directory
-- Search files AND folders → search_item (use this instead of search_file)
-- Execute code → execute_code
-- Open Windows application → open_application
-
-IMPORTANT SEARCH COMMAND UPDATE:
-- Use "search_item" NOT "search_file"
-- Parameters: "keyword" (not "filename"), "search_path", "search_type" ("file", "folder", or "both")
-- Example: {"command": "search_item", "parameters": {"keyword": "project", "search_path": "C:\\", "search_type": "both"}}
-
-CODE EXECUTION UPDATE:
-- When executing code files (.py, .bat, .js), the terminal will remain open after execution
-- This allows you to see the output and any error messages
-
-APPLICATION OPENING:
-- Use "open_application" command for opening Windows apps
-- Supported apps: notepad, excel, word, powerpoint, calculator, paint, chrome, firefox, edge, cmd, powershell, etc.
-- You can also specify custom applications by name
-
-KEYWORD EXTRACTION RULES:
-
-CRITICAL: Extract the ACTUAL SEARCH KEYWORD from user requests, not the entire phrase.
-
-1. REMOVE ACTION WORDS:
-   - Remove words like: "open", "find", "search", "look for", "locate", "get"
-   - Remove file type words unless they are part of the actual filename: "photo", "image", "file", "document", "video", "folder"
-
-2. EXTRACT THE CORE FILENAME/PATH:
-   - "open ironman photo from f drive" → keyword: "ironman"
-   - "find my resume document" → keyword: "resume"
-   - "search for project report pdf" → keyword: "project report"
-   - "locate vacation pictures folder" → keyword: "vacation pictures"
-
-3. PRESERVE ACTUAL FILENAME COMPONENTS:
-   - If the user specifies a clear filename, use it as-is: "annual report.pdf" → "annual report.pdf"
-   - If it's a descriptive request, extract the main identifier: "my thesis document" → "thesis"
-
-EXAMPLES:
-
-"open ironman photo from f drive"
-{
-  "workflow": [
-    {
-      "command": "search_item",
-      "parameters": {"keyword": "ironman", "search_path": "F:\\", "search_type": "both"}
-    },
-    {
-      "command": "open_file",
-      "parameters": {"path": "[SEARCH_RESULT_PATH]"}
-    }
-  ]
-}
-
-"find my resume document in downloads"
-{
-  "workflow": [
-    {
-      "command": "search_item",
-      "parameters": {"keyword": "resume", "search_path": "C:\\Users\\[Username]\\Downloads", "search_type": "both"}
-    },
-    {
-      "command": "open_file",
-      "parameters": {"path": "[SEARCH_RESULT_PATH]"}
-    }
-  ]
-}
-
-"search for project report pdf file"
-{
-  "workflow": [
-    {
-      "command": "search_item",
-      "parameters": {"keyword": "project report", "search_path": "C:\\", "search_type": "both"}
-    },
-    {
-      "command": "open_file",
-      "parameters": {"path": "[SEARCH_RESULT_PATH]"}
-    }
-  ]
-}
-
-"locate vacation pictures folder"
-{
-  "workflow": [
-    {
-      "command": "search_item",
-      "parameters": {"keyword": "vacation pictures", "search_path": "C:\\", "search_type": "folder"}
-    },
-    {
-      "command": "open_folder",
-      "parameters": {"path": "[SEARCH_RESULT_PATH]"}
-    }
-  ]
-}
-
-SEARCH STRATEGY GUIDE:
-
-1. KEYWORD EXTRACTION:
-   - Extract the core filename/foldername from the request
-   - Remove action words and generic file type descriptors
-
-2. FILE TYPE SEARCHES (only when explicitly requested):
-   - Only use file extension searches when user specifically asks for file types: "all image files", "PDF documents"
-   - Examples: "image files", "video files", "PDF documents", "all MP3 files"
-
-3. SEARCH AND OPEN COMBINATIONS:
-   - Always use workflows for search-and-open requests
-   - Search first, then open the result
-
-Workflow Building:
-- Preserve command order as implied in user's request
-- Extract the actual search keyword by removing action words and generic descriptors
-- Use "[SEARCH_RESULT_PATH]" as placeholder in open commands
-
-CRITICAL: 
-- EXTRACT THE ACTUAL KEYWORD, not the entire phrase
-- Remove words like "open", "photo", "file", "document" unless they are part of the actual filename
-- NEVER output natural language responses. ALWAYS output valid JSON only.
-"""
-
-# Initialize enhanced components
-agent = EnhancedFileAgent(system_prompt=ENHANCED_SYSTEM_PROMPT)
-voice_recognition = AdvancedVoiceRecognition()
-
 class UserRequest(BaseModel):
     prompt: str
     current_dir: str = "."
@@ -921,53 +1041,24 @@ class UserRequest(BaseModel):
 def home():
     return {
         "message": "Enhanced FileWise API is running", 
-        "features": ["conversational_memory", "semantic_search", "voice_recognition"],
+        "features": [
+            "conversational_memory", 
+            "semantic_search", 
+            "program_management",
+            "internet_browsing", 
+            "system_info",
+            "voice_recognition"
+        ],
         "status": "ok"
     }
 
-@app.get("/status")
-def get_status():
-    return {
-        "is_listening": voice_recognition.is_listening,
-        "current_status": voice_recognition.current_status,
-        "last_command": voice_recognition.last_command,
-        "last_error": voice_recognition.last_error,
-        "conversation_history_count": len(agent.memory.history),
-        "wake_words": voice_recognition.wake_words
-    }
-
-@app.post("/start-voice")
-def start_voice_recognition():
-    return voice_recognition.start_continuous_listening()
-
-@app.post("/stop-voice")
-def stop_voice_recognition():
-    return voice_recognition.stop_listening()
-
 @app.post("/file-agent")
 def handle_request(request: UserRequest):
-    # Add semantic search parameter if requested
-    if request.use_semantic:
-        # This would modify the search parameters to enable semantic matching
-        pass
-        
     result = agent.process_request(request.prompt, request.current_dir)
     print(result)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result)
     return result
-
-@app.get("/conversation-history")
-def get_conversation_history():
-    return {
-        "history": agent.memory.history,
-        "total_interactions": len(agent.memory.history)
-    }
-
-@app.post("/clear-conversation")
-def clear_conversation():
-    agent.memory.history = []
-    return {"message": "Conversation history cleared"}
 
 if __name__ == "__main__":
     import uvicorn
